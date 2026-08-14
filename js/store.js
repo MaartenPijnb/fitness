@@ -71,9 +71,30 @@ const Store = (() => {
     settings: { targetSets: 3, targetReps: 10, unit: 'kg' },
   });
 
+  /**
+   * Vraagt de browser om de opslag als blijvend te behandelen.
+   *
+   * Zonder dit mag een browser IndexedDB opruimen bij ruimtegebrek of tijdens
+   * een schoonmaakronde, en daar zijn Brave en Safari strenger in dan de rest.
+   * Een geïnstalleerde app krijgt dit meestal stilzwijgend toegekend. Lukt het
+   * niet, dan is dat geen ramp — de exportknop blijft het vangnet.
+   */
+  const storage = { persisted: null, usage: null };
+
+  async function keepStorage() {
+    try {
+      if (!navigator.storage?.persist) return;
+      storage.persisted = await navigator.storage.persisted() || await navigator.storage.persist();
+      storage.usage = (await navigator.storage.estimate?.())?.usage ?? null;
+    } catch {
+      storage.persisted = null;
+    }
+  }
+
   async function init() {
     db = await open();
     state = await idbGet(KEY);
+    keepStorage();   // op de achtergrond, hoeft het opstarten niet op te houden
 
     if (!state) {
       // Eerste start. Ligt er een seed naast de app, dan is dat de geschiedenis
@@ -273,6 +294,7 @@ const Store = (() => {
     init, onChange, touched, uid,
     get state() { return state; },
     get idx() { return idx; },
+    get storage() { return storage; },
     addSet, updateSet, removeSet, addExercise,
     saveRoutine, removeRoutine, startRoutine, activeRoutine,
     exportBlob, fileName, merge,

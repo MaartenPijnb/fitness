@@ -791,6 +791,25 @@
 
   /* ============================== Meer ================================== */
 
+  /**
+   * Of de browser de opslag als blijvend behandelt. Relevant in browsers die
+   * streng opruimen (Brave, Safari): staat dit uit, dan is een export je enige
+   * vangnet en zeggen we dat er ook bij.
+   */
+  function storageLine() {
+    const { persisted, usage } = Store.storage;
+    if (persisted === null) return '';
+    const mb = usage ? ` · ${(usage / 1048576).toFixed(1).replace('.', ',')} MB` : '';
+    return persisted
+      ? `<p class="tiny dim" style="padding:8px 6px 0;margin:0">
+           <span style="color:var(--good)">●</span> Opslag is blijvend${mb} — je browser ruimt deze data niet zomaar op.
+         </p>`
+      : `<p class="tiny" style="padding:8px 6px 0;margin:0;color:var(--warn)">
+           ● Je browser heeft blijvende opslag geweigerd${mb}. Installeer de app op je beginscherm,
+           of maak regelmatig een back-up naar een bestand.
+         </p>`;
+  }
+
   function viewMore() {
     const ov = Engine.overview();
     const n = Store.state.sets.filter(s => !s.del).length;
@@ -817,6 +836,7 @@
         Je data staat op dit toestel. Bewaar het exportbestand in iCloud Drive of Google Drive
         en lees het op je andere telefoon in om beide bij te werken.
       </p>
+      ${storageLine()}
 
       <div class="sec"><h2>Routines</h2>
         <button class="link" data-act="new-routine">Nieuw</button></div>

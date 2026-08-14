@@ -7,7 +7,7 @@
    achtergrond om de kopie te verversen.
    ========================================================================= */
 
-const CACHE = 'kracht-v1';
+const CACHE = 'kracht-v2';
 
 const SHELL = [
   '.',
