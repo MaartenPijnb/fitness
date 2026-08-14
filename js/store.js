@@ -61,6 +61,19 @@ const Store = (() => {
     { id: 'c8', name: 'Cardio',    src: 'Cardio',    colour: '#ff8a65' },
   ];
 
+  /* De volgorde waarin de spiergroepen normaal aan bod komen. Wordt overal
+     aangehouden: het dagplan, de mapjes en elke keuzelijst. Sorteren gebeurt
+     bij het laden, zodat ook opslag van vóór deze volgorde meegaat. */
+  const CATEGORY_ORDER = ['Chest', 'Back', 'Shoulders', 'Triceps', 'Biceps', 'Legs', 'Abs', 'Cardio'];
+
+  function sortCategories(list) {
+    const rank = c => {
+      const i = CATEGORY_ORDER.indexOf(c.src);
+      return i === -1 ? CATEGORY_ORDER.length : i;   // onbekende groepen achteraan
+    };
+    return [...list].sort((a, b) => rank(a) - rank(b));
+  }
+
   const blank = () => ({
     v: 1,
     categories: BASE_CATEGORIES,
@@ -114,7 +127,7 @@ const Store = (() => {
     }
 
     // Voor opslag van een oudere versie die een later veld nog mist.
-    state.categories ||= BASE_CATEGORIES;
+    state.categories = sortCategories(state.categories?.length ? state.categories : BASE_CATEGORIES);
     state.routines ||= [];
     state.settings ||= { targetSets: 3, targetReps: 10, unit: 'kg' };
     state.gear ||= { bar: 20, plates: [20, 15, 10, 5, 2.5, 1.25] };
@@ -265,7 +278,7 @@ const Store = (() => {
     state.sets = s.list;
     state.exercises = e.list;
     state.routines = r.list;
-    state.categories = c.list;   // nodig als de app leeg begon
+    state.categories = sortCategories(c.list);   // nodig als de app leeg begon
     if (incoming.gear) state.gear = incoming.gear;
 
     touched();
