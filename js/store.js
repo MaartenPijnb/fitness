@@ -210,6 +210,22 @@ const Store = (() => {
     return e;
   }
 
+  function updateExercise(id, patch) {
+    const e = state.exercises.find(x => x.id === id);
+    if (!e) return;
+    Object.assign(e, patch, { mod: Date.now() });
+    touched();
+  }
+
+  /* Terugdraaien van een verwijdering: de rij staat er nog, alleen gemarkeerd. */
+  function restoreSet(id) {
+    const s = state.sets.find(x => x.id === id);
+    if (!s) return;
+    delete s.del;
+    s.mod = Date.now();
+    touched();
+  }
+
   function saveRoutine(name, exIds, id) {
     const existing = id && state.routines.find(r => r.id === id);
     if (existing) {
@@ -308,7 +324,7 @@ const Store = (() => {
     get state() { return state; },
     get idx() { return idx; },
     get storage() { return storage; },
-    addSet, updateSet, removeSet, addExercise,
+    addSet, updateSet, removeSet, restoreSet, addExercise, updateExercise,
     saveRoutine, removeRoutine, startRoutine, activeRoutine,
     exportBlob, fileName, merge,
     getHandle, setHandle, handleReady,

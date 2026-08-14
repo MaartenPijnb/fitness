@@ -41,6 +41,7 @@
     trophy:'<path d="M8 4h8v5a4 4 0 01-8 0V4zM8 6H5v1a3 3 0 003 3M16 6h3v1a3 3 0 01-3 3M10 17h4M9 21h6M12 13v4"/>',
     back:  '<path d="M15 5l-7 7 7 7"/>',
     chev:  '<path d="M9 5l7 7-7 7"/>',
+    pencil:'<path d="M4 20h4L19 9a2.8 2.8 0 10-4-4L4 16v4z"/><path d="M14.5 6.5l3 3"/>',
   };
 
   const svg = (d, cls = '') =>
@@ -81,15 +82,24 @@
     : `${Math.round(n / 365)} jaar geleden`;
 
   let toastTimer;
-  function toast(msg, ms = 2100) {
+  let toastAction = null;
+
+  /** `action` = { label, run } zet er een knop naast, bijvoorbeeld om te herstellen. */
+  function toast(msg, ms = 2100, action = null) {
     clearTimeout(toastTimer);
-    toastEl.textContent = msg;
+    toastAction = action;
+    toastEl.innerHTML = `<span>${esc(msg)}</span>`
+      + (action ? `<button class="toast-act" data-act="toast-act">${esc(action.label)}</button>` : '');
     toastEl.hidden = false;
     toastEl.classList.remove('out');
-    toastTimer = setTimeout(() => {
-      toastEl.classList.add('out');
-      setTimeout(() => { toastEl.hidden = true; }, 280);
-    }, ms);
+    toastTimer = setTimeout(hideToast, ms);
+  }
+
+  function hideToast() {
+    clearTimeout(toastTimer);
+    toastAction = null;
+    toastEl.classList.add('out');
+    setTimeout(() => { toastEl.hidden = true; }, 280);
   }
 
   const buzz = ms => { try { navigator.vibrate?.(ms); } catch {} };
@@ -301,29 +311,35 @@
     // Blijft staan zodra er gelogd is: als het advies zou verdwijnen schuift de
     // logknop omhoog, precies waar de duim al onderweg is naar de volgende set.
     const advice = plan?.reason ? `
-      <div class="advice${plan.up ? ' up' : ''}">${svg(plan.up ? I.up : I.bulb)}<span>${esc(plan.reason)}</span></div>` : '';
+      <div class="advice${adviceKind(plan)}">${svg(adviceIcon(plan))}<span>${esc(plan.reason)}</span></div>` : '';
 
     const rows = logged.map((s, i) => `
-      <div class="set-row">
+      <div class="set-row${s.id === st.editId ? ' editing' : ''}">
         <span class="set-n">${i + 1}</span>
         <span class="grow"><span class="set-w">${fmtW(s.w)} kg × ${s.r}</span>
           ${s.pr ? ' <span class="badge gold">record</span>' : ''}
           ${s.n ? `<div class="tiny dim">${esc(s.n)}</div>` : ''}</span>
-        <button class="icon-btn" data-act="set-edit" data-id="${s.id}" aria-label="Aanpassen">${svg(I.swap)}</button>
+        <button class="icon-btn" data-act="set-edit" data-id="${s.id}" aria-label="Aanpassen">${svg(I.pencil)}</button>
         <button class="icon-btn" data-act="set-del" data-id="${s.id}" aria-label="Verwijderen">${svg(I.trash)}</button>
       </div>`).join('');
 
     const n = logged.length + 1;
     const target = plan?.sets || 3;
+    const editing = st.editId && logged.some(s => s.id === st.editId);
+    const nr = editing ? logged.findIndex(s => s.id === st.editId) + 1 : n;
 
     return `
       <div class="sheet-head">
         <h3>${esc(ex.name)}</h3>
-        <p>${esc(cat.name)} · ${st.date === Engine.today() ? 'vandaag' : dateLabel(st.date, true)}
-           ${logged.length ? ` · ${logged.length}/${target} sets` : ''}</p>
+        <p>${esc(cat.name)}${logged.length ? ` · ${logged.length}/${target} sets` : ''}</p>
+        <label class="date-pick">
+          ${svg(I.today)}
+          <span>${st.date === Engine.today() ? 'Vandaag' : dateLabel(st.date, true)}</span>
+          <input type="date" value="${st.date}" max="${Engine.today()}" data-act="date-in" aria-label="Datum van deze training">
+        </label>
       </div>
 
-      ${advice}
+      ${editing ? '' : advice}
 
       <div class="stepper" style="margin-top:14px">
         <span class="lab">Gewicht</span>
@@ -346,8 +362,11 @@
       </div>
 
       <button class="btn primary block log-btn" data-act="save-set">
-        ${svg(I.plus)} Log set ${n}${n > target ? '' : ` van ${target}`}
+        ${editing
+          ? `${svg(I.check)} Set ${nr} bijwerken`
+          : `${svg(I.plus)} Log set ${n}${n > target ? '' : ` van ${target}`}`}
       </button>
+      ${editing ? `<button class="btn ghost block sm" style="margin-top:8px" data-act="edit-cancel">Annuleren</button>` : ''}
 
       ${logged.length ? `<div class="sec" style="margin:20px 0 8px"><h2>Gelogd</h2>
         <span class="tiny dim">${fmtVol(Engine.volumeOf(logged)).v} ${fmtVol(Engine.volumeOf(logged)).u}</span></div>
@@ -382,6 +401,19 @@
     if (!st || st.kind !== 'log') return;
     const w = +st.w, r = +st.r;
     if (!(r > 0)) { toast('Vul een aantal herhalingen in'); return; }
+
+    // Bewerken past de bestaande rij aan in plaats van hem te wissen en
+    // opnieuw te loggen — anders verschuift de volgorde en verdwijnt de notitie.
+    if (st.editId) {
+      const pr = Engine.checkPR(st.exId, w, r, st.editId);
+      Store.updateSet(st.editId, { w, r, pr: pr ? 1 : 0 });
+      st.editId = null;
+      Engine.clear();
+      drawSheet();
+      render();
+      toast(`Set bijgewerkt — ${fmtW(w)} kg × ${r}`, 1500);
+      return;
+    }
 
     const pr = Engine.checkPR(st.exId, w, r);
     const s = Store.addSet({ ex: st.exId, d: st.date, w, r, n: st.note });
@@ -623,6 +655,29 @@
 
   /* ------------------------ Detail van één oefening --------------------- */
 
+  /* Het advies krijgt een kleur naar zijn strekking: groen vooruit, oranje als
+     je terugmoet naar wat je al kon, en neutraal voor de rest. */
+  const adviceKind = p => p.deload ? ' warn' : p.recover ? ' back' : p.up ? ' up' : '';
+  const adviceIcon = p => p.deload ? I.down : p.recover ? I.up : p.up ? I.up : I.bulb;
+
+  /**
+   * Je beste schone sessie tegenover waar je nu staat. Het logboek laat zien
+   * dat wegzakken vaker gebeurt dan falen, en dat zie je alleen als je piek
+   * ergens in beeld staat.
+   */
+  function peakLine(exId) {
+    const p = Engine.peak(exId);
+    if (!p || p.w <= 0) return '';
+    const best = `${p.sets}×${p.reps} op <b>${fmtW(p.w)} kg</b>`;
+    if (p.behind < 2) {
+      return `<div class="peak ok">${svg(I.trophy)}<span>
+        Je beste is ${best} — daar zit je nu ook.</span></div>`;
+    }
+    return `<div class="peak">${svg(I.trophy)}<span>
+      Je beste: ${best} op ${esc(Engine.dutchDate(p.d))} ·
+      nu <b>${fmtW(p.now)} kg</b>, <b class="warnc">${p.behind.toFixed(0)}% eronder</b></span></div>`;
+  }
+
   function viewExercise(exId) {
     const ex = Store.ex(exId);
     if (!ex) return '<div class="empty"><p>Oefening niet gevonden.</p></div>';
@@ -662,6 +717,7 @@
       <div class="row" style="padding:6px 0 2px">
         <button class="icon-btn" data-act="back">${svg(I.back)}</button>
         <span class="grow"></span>
+        <button class="icon-btn" data-act="edit-ex" data-ex="${exId}" aria-label="Naam of spiergroep aanpassen">${svg(I.pencil)}</button>
         <button class="btn sm ghost" data-act="log" data-ex="${exId}">${svg(I.plus)} Loggen</button>
       </div>
       <div class="head" style="padding-top:6px">
@@ -684,8 +740,9 @@
           <div class="grow"></div>
           <button class="btn primary sm" data-act="log" data-ex="${exId}">Loggen</button>
         </div>
-        ${plan.reason ? `<div class="advice${plan.up ? ' up' : ''}" style="margin-top:14px">
-          ${svg(plan.up ? I.up : I.bulb)}<span>${esc(plan.reason)}</span></div>` : ''}
+        ${plan.reason ? `<div class="advice${adviceKind(plan)}" style="margin-top:14px">
+          ${svg(adviceIcon(plan))}<span>${esc(plan.reason)}</span></div>` : ''}
+        ${peakLine(exId)}
       </div>
 
       <div class="sec"><h2>Verloop</h2>
@@ -1022,9 +1079,17 @@
       }).join('')}`;
   }
 
+  /** Zelfde formulier voor een nieuwe oefening en voor het aanpassen van een bestaande. */
   function sheetNewEx(st) {
+    const edit = !!st.exId;
+    const n = edit ? Store.setsFor(st.exId).length : 0;
     return `
-      <div class="sheet-head"><h3>Nieuwe oefening</h3><p>Kies een spiergroep</p></div>
+      <div class="sheet-head">
+        <h3>${edit ? 'Oefening aanpassen' : 'Nieuwe oefening'}</h3>
+        <p>${edit
+          ? `${nf(n)} ${n === 1 ? 'set' : 'sets'} blijven eraan hangen`
+          : 'Kies een spiergroep'}</p>
+      </div>
       <input class="search" placeholder="Naam van de oefening" value="${esc(st.name || '')}" data-act="nx-name" autocomplete="off">
       <div class="stack" style="margin-top:14px">
         ${Store.state.categories.map(c => `
@@ -1035,7 +1100,9 @@
           </button>`).join('')}
       </div>
       <button class="btn primary block" style="margin-top:16px" data-act="nx-save"
-        ${(st.name || '').trim() && st.cat ? '' : 'disabled'}>${svg(I.plus)} Toevoegen</button>`;
+        ${(st.name || '').trim() && st.cat ? '' : 'disabled'}>
+        ${svg(edit ? I.check : I.plus)} ${edit ? 'Opslaan' : 'Toevoegen'}
+      </button>`;
   }
 
   function sheetNote(st) {
@@ -1136,17 +1203,50 @@
 
       case 'save-set': saveSet(); break;
 
-      case 'set-del':
-        Store.removeSet(el.dataset.id);
+      case 'set-del': {
+        const id = el.dataset.id;
+        const s = Store.state.sets.find(x => x.id === id);
+        Store.removeSet(id);
+        if (sheetState?.editId === id) sheetState.editId = null;
         Engine.clear();
         drawSheet();
         render();
-        toast('Set verwijderd');
+        toast(s ? `${fmtW(s.w)} kg × ${s.r} verwijderd` : 'Set verwijderd', 5000, {
+          label: 'Ongedaan maken',
+          run: () => {
+            Store.restoreSet(id);
+            Engine.clear();
+            drawSheet();
+            render();
+            toast('Terug');
+          },
+        });
         break;
+      }
 
       case 'set-edit': {
         const s = Store.state.sets.find(x => x.id === el.dataset.id);
-        if (s) { sheetState.w = s.w; sheetState.r = s.r; Store.removeSet(s.id); Engine.clear(); drawSheet(); render(); }
+        if (!s) break;
+        sheetState.editId = s.id;
+        sheetState.w = s.w;
+        sheetState.r = s.r;
+        drawSheet();
+        break;
+      }
+
+      case 'edit-cancel': {
+        const plan = sheetState.plan;
+        sheetState.editId = null;
+        sheetState.w = plan.fresh ? 20 : plan.w;
+        sheetState.r = plan.r;
+        drawSheet();
+        break;
+      }
+
+      case 'toast-act': {
+        const a = toastAction;
+        hideToast();
+        a?.run();
         break;
       }
 
@@ -1193,14 +1293,24 @@
         openSheet(sheetNewEx, { kind: 'newex', cat: el.dataset.cat || null, name: '' });
         break;
 
+      case 'edit-ex': {
+        const ex = Store.ex(el.dataset.ex);
+        if (ex) openSheet(sheetNewEx, { kind: 'newex', exId: ex.id, name: ex.name, cat: ex.cat });
+        break;
+      }
+
       case 'nx-cat': sheetState.cat = el.dataset.cat; drawSheet(); break;
 
       case 'nx-save': {
-        const { name, cat } = sheetState;
-        const ex = Store.addExercise(name, cat);
+        const { name, cat, exId } = sheetState;
+        if (exId) {
+          Store.updateExercise(exId, { name: name.trim(), cat });
+          toast('Opgeslagen');
+        } else {
+          toast(`${Store.addExercise(name, cat).name} toegevoegd`);
+        }
         Engine.clear();
         closeSheet();
-        toast(`${ex.name} toegevoegd`);
         render();
         break;
       }
@@ -1267,6 +1377,19 @@
     else if (a === 'pick-q') { sheetState.q = el.value; const p = el.selectionStart; drawSheet(); const n = sheetBody.querySelector('[data-act="pick-q"]'); if (n) { n.focus(); n.setSelectionRange(p, p); } }
     else if (a === 'w-in') sheetState.w = Math.max(0, +el.value || 0);
     else if (a === 'r-in') sheetState.r = Math.max(1, Math.round(+el.value) || 1);
+    else if (a === 'date-in') {
+      // Een andere dag betekent een ander voorstel en een andere setlijst.
+      if (!el.value) return;
+      const st = sheetState;
+      st.date = el.value;
+      st.editId = null;
+      st.plan = Engine.suggest(st.exId, st.date);
+      const logged = Store.setsOn(st.date).filter(s => s.ex === st.exId);
+      const base = logged[logged.length - 1];
+      st.w = base ? base.w : (st.plan.fresh ? 20 : st.plan.w);
+      st.r = base ? base.r : st.plan.r;
+      drawSheet();
+    }
     else if (a === 'pl-in') { sheetState.target = +el.value || 0; clearTimeout(sheetState._t); sheetState._t = setTimeout(drawSheet, 500); }
     else if (a === 'rt-name') { sheetState.name = el.value; const b = sheetBody.querySelector('[data-act="rt-save"]'); if (b) b.disabled = !(el.value.trim() && sheetState.sel.length); }
     else if (a === 'nx-name') { sheetState.name = el.value; const b = sheetBody.querySelector('[data-act="nx-save"]'); if (b) b.disabled = !(el.value.trim() && sheetState.cat); }

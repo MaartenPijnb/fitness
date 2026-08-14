@@ -130,6 +130,70 @@ const Engine = (() => {
 
   /* ---------------------------- Voorstel gewicht ----------------------- */
 
+  /** Topgewicht van een sessie, opwarmsets niet meegerekend. */
+  const topOf = s => Math.max(...workingSets(s.sets).map(x => x.w));
+
+  /** Werd het volle aantal sets op het topgewicht schoon afgemaakt? */
+  function wasClean(s, reps, nSets) {
+    const work = workingSets(s.sets);
+    const top = Math.max(...work.map(x => x.w));
+    const atTop = work.filter(x => x.w === top);
+    return atTop.length >= Math.min(nSets, 3) && atTop.every(x => x.r >= reps);
+  }
+
+  /**
+   * De zwaarste sessie die je de laatste maanden schoon afmaakte.
+   *
+   * Alleen naar je vorige training kijken laat je wegzakken: deed je in maart
+   * drie schone sets op 70 en in april 60, dan zou het voorstel 65 worden. Deze
+   * functie onthoudt waar je echt stond.
+   */
+  function bestClean(exId, skipDate, days = 150) {
+    const reps = targetReps(exId);
+    const nSets = targetSets(exId);
+    let best = null;
+    for (const s of sessions(exId)) {
+      if (s.d === skipDate || daysAgo(s.d) > days) continue;
+      if (!wasClean(s, reps, nSets)) continue;
+      const w = topOf(s);
+      if (!best || w > best.w) best = { w, d: s.d, reps };
+    }
+    return best;
+  }
+
+  /** Hoeveel sessies achter elkaar op precies hetzelfde topgewicht. */
+  function stall(exId, skipDate) {
+    const ses = sessions(exId).filter(s => s.d !== skipDate);
+    if (ses.length < 3) return null;
+    const w = topOf(ses[ses.length - 1]);
+    let n = 0;
+    for (let i = ses.length - 1; i >= 0 && topOf(ses[i]) === w; i--) n++;
+    return n >= 3 ? { n, w } : null;
+  }
+
+  /** Je beste sessie ooit bij deze oefening, en hoe ver je daar nu vanaf zit. */
+  function peak(exId) {
+    return memo('peak:' + exId, () => {
+      const ses = sessions(exId);
+      if (ses.length < 2) return null;
+      const reps = targetReps(exId);
+      const nSets = targetSets(exId);
+
+      let best = null;
+      for (const s of ses) {
+        if (!wasClean(s, reps, nSets)) continue;
+        // >= zodat bij gelijk gewicht de meest recente keer telt: "dat kon je
+        // in maart nog" zegt meer dan een datum uit 2022.
+        const w = topOf(s);
+        if (!best || w >= best.w) best = { w, d: s.d, reps };
+      }
+      if (!best) return null;
+
+      const now = topOf(ses[ses.length - 1]);
+      return { ...best, sets: nSets, now, behind: best.w > now ? (best.w - now) / best.w * 100 : 0 };
+    });
+  }
+
   /**
    * Wat te tillen bij de volgende sessie.
    * Alle werksets op het topgewicht gehaald → een pen erbij, anders herhalen.
@@ -162,10 +226,29 @@ const Engine = (() => {
     }
 
     if (allHit && enough) {
+      // Ging het makkelijk, maar lag je eerder al hoger? Dan eerst daarheen terug.
+      const back = bestClean(exId, skipDate);
+      if (back && back.w > topW) {
+        return {
+          w: back.w, r: reps, sets: nSets, up: true, recover: true,
+          reason: `Je deed ${nSets}×${reps} op ${fmt(back.w)} kg op ${dutchDate(back.d)}. Vorige keer bleef je op ${fmt(topW)} — pak die ${fmt(back.w)} weer.`,
+        };
+      }
       const next = stepWeight(exId, topW, 1);
       return {
         w: next, r: reps, sets: nSets, up: next > topW,
         reason: `Vorige keer ${atTop.length}×${reps} op ${fmt(topW)} kg gehaald${next > topW ? ' — tijd voor meer' : ''}.`,
+      };
+    }
+
+    // Blijf je op hetzelfde gewicht hangen zonder de reps te halen, dan helpt
+    // nog een poging zelden. Een stap terug en opnieuw aanlopen wel.
+    const st = stall(exId, skipDate);
+    if (st && st.n >= 3) {
+      const lighter = stepWeight(exId, topW, -1);
+      return {
+        w: lighter, r: reps, sets: nSets, up: false, deload: true,
+        reason: `Al ${st.n} sessies op ${fmt(topW)} kg zonder de volle ${reps}. Doe ${fmt(lighter)} schoon af, dan pak je ${fmt(topW)} de keer daarna wel.`,
       };
     }
 
@@ -497,11 +580,21 @@ const Engine = (() => {
 
   const fmt = n => (Math.round(n * 100) / 100).toString().replace('.', ',');
 
+  const MONTHS = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+
+  /** Korte datum voor in een zin: "31 mrt" of "4 sep 2025" bij een ander jaar. */
+  function dutchDate(iso) {
+    const d = parse(iso);
+    const base = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+    return d.getFullYear() === new Date().getFullYear() ? base : `${base} ${d.getFullYear()}`;
+  }
+
   return {
-    today, toISO, parse, daysAgo, daysBetween, fmt, clear,
+    today, toISO, parse, daysAgo, daysBetween, fmt, dutchDate, clear,
     sessions, lastSession, workingSets,
     ladder, stepOf, stepWeight, targetReps, targetSets,
     suggest, rotation, suggestSession, planFor, catStats,
+    bestClean, stall, peak,
     e1rm, records, checkPR,
     overview, balance, series, monthly, volumeOf, plates,
   };

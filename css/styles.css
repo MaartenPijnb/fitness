@@ -509,6 +509,27 @@ button.pane:active::before { opacity: 1; transform: translateX(0); transition-du
 .sheet-head h3 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -0.028em; }
 .sheet-head p { margin: 3px 0 0; font-size: 13px; color: var(--ink-2); }
 
+/* Datum van de training. De echte date-input ligt onzichtbaar over het pilletje
+   heen, zodat de systeemkiezer opent maar het uiterlijk van de app blijft. */
+.date-pick {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 9px; padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--ink-2);
+  background: rgb(var(--glass-tint) / 0.08);
+  border: 0.5px solid rgb(var(--glass-tint) / 0.13);
+  cursor: pointer;
+}
+.date-pick svg { width: 14px; height: 14px; stroke-width: 1.9; opacity: 0.75; }
+.date-pick input {
+  position: absolute; inset: 0;
+  opacity: 0; width: 100%; height: 100%;
+  border: 0; padding: 0; cursor: pointer;
+}
+.date-pick:active { background: rgb(var(--glass-tint) / 0.14); }
+
 /* ------- Setinvoer: het scherm dat het vaakst gebruikt wordt ------------ */
 
 .stepper { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
@@ -580,6 +601,27 @@ button.pane:active::before { opacity: 1; transform: translateX(0); transition-du
 .advice svg { flex: none; width: 17px; height: 17px; margin-top: 1px; stroke: var(--accent-2); }
 .advice.up { background: linear-gradient(150deg, rgb(126 231 135 / 0.18), rgb(90 208 230 / 0.07)); border-color: rgb(126 231 135 / 0.30); }
 .advice.up svg { stroke: var(--good); }
+/* Terug naar wat je al kon */
+.advice.back { background: linear-gradient(150deg, rgb(255 215 110 / 0.17), rgb(255 160 60 / 0.06)); border-color: rgb(255 215 110 / 0.32); }
+.advice.back svg { stroke: var(--warn); }
+/* Een stap terug om er weer overheen te komen */
+.advice.warn { background: linear-gradient(150deg, rgb(255 93 143 / 0.15), rgb(255 160 60 / 0.06)); border-color: rgb(255 93 143 / 0.28); }
+.advice.warn svg { stroke: var(--hot); }
+
+/* Je piek tegenover waar je nu staat */
+.peak {
+  display: flex; gap: 9px; align-items: flex-start;
+  margin-top: 9px; padding: 10px 13px;
+  border-radius: var(--r-sm);
+  font-size: 12.5px; line-height: 1.45;
+  color: var(--ink-2);
+  background: rgb(var(--glass-tint) / 0.05);
+  border: 0.5px solid rgb(var(--glass-tint) / 0.09);
+}
+.peak svg { flex: none; width: 16px; height: 16px; margin-top: 1px; stroke: var(--warn); stroke-width: 1.8; }
+.peak b { color: var(--ink); font-weight: 650; }
+.peak b.warnc { color: var(--hot); }
+.peak.ok svg { stroke: var(--good); }
 
 /* Sets die vandaag al gelogd zijn */
 .set-row {
@@ -591,6 +633,13 @@ button.pane:active::before { opacity: 1; transform: translateX(0); transition-du
   animation: pop 0.32s var(--ease);
 }
 @keyframes pop { from { opacity: 0; transform: translateY(-7px) scale(0.97); } }
+
+/* De set die je aan het aanpassen bent */
+.set-row.editing {
+  background: linear-gradient(150deg, rgb(139 125 255 / 0.20), rgb(90 208 230 / 0.07));
+  border-color: rgb(139 125 255 / 0.42);
+}
+.set-row.editing .set-n { background: var(--accent); color: #fff; }
 .set-n {
   flex: none; width: 25px; height: 25px; border-radius: 9px;
   display: grid; place-items: center;
@@ -743,14 +792,14 @@ table.recs b { font-weight: 650; }
   bottom: calc(var(--tab-h) + 22px);
   transform: translateX(-50%);
   z-index: 90;
-  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px 11px 20px;
   border-radius: 999px;
   font-size: 14px;
   font-weight: 600;
-  white-space: nowrap;
   max-width: calc(100vw - 32px);
-  overflow: hidden;
-  text-overflow: ellipsis;
   background: linear-gradient(160deg, rgb(var(--glass-tint) / 0.17), rgb(var(--glass-tint) / 0.07));
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -762,6 +811,22 @@ table.recs b { font-weight: 650; }
   .toast { background: rgb(255 255 255 / 0.9); box-shadow: 0 10px 30px rgb(60 60 120 / 0.24); }
 }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 14px) scale(0.94); } }
+.toast > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast:not(:has(.toast-act)) { padding-right: 20px; }
+
+.toast-act {
+  flex: none;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--accent-2);
+  background: rgb(var(--glass-tint) / 0.12);
+  transition: transform 0.15s var(--ease), background 0.2s var(--ease);
+}
+.toast-act:active { transform: scale(0.93); background: rgb(var(--glass-tint) / 0.2); }
+@media (prefers-color-scheme: light) { .toast-act { background: rgb(0 0 0 / 0.05); } }
+
 .toast.out { animation: toast-out 0.28s var(--ease-in) forwards; }
 @keyframes toast-out { to { opacity: 0; transform: translate(-50%, 10px) scale(0.96); } }
 
