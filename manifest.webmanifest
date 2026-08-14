@@ -1,0 +1,27 @@
+{
+  "name": "Kracht — trainingslogboek",
+  "short_name": "Kracht",
+  "description": "Registreer je fitnesssessies en zie je progressie.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07070e",
+  "theme_color": "#07070e",
+  "lang": "nl",
+  "dir": "ltr",
+  "categories": ["health", "fitness", "lifestyle"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Training loggen",
+      "short_name": "Loggen",
+      "url": ".?a=log",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

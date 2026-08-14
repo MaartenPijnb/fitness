@@ -1,0 +1,11 @@
+# Persoonlijke trainingsdata hoort niet in een publieke repo.
+# GitHub Pages serveert alles wat je pusht, dus houd deze buiten de commit:
+FitNotes_Backup.fitnotes
+kracht-backup.json
+data/seed.json
+
+# Rommel
+.DS_Store
+Thumbs.db
+*.log
+.claude/
