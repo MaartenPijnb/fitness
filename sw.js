@@ -7,7 +7,7 @@
    achtergrond om de kopie te verversen.
    ========================================================================= */
 
-const CACHE = 'kracht-v2';
+const CACHE = 'kracht-v3';
 
 const SHELL = [
   '.',
@@ -52,7 +52,11 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     caches.match(req).then(hit => {
       // Op de achtergrond verversen zodat een update de volgende keer klaarstaat.
-      const net = fetch(req).then(res => {
+      // `no-cache` dwingt een controle bij de server af: zonder dat kan de
+      // HTTP-cache van de browser een oude versie blijven teruggeven en landt
+      // een update pas veel later. De gebruiker merkt er niets van, want het
+      // antwoord uit de cache gaat hier al de deur uit.
+      const net = fetch(req, { cache: 'no-cache' }).then(res => {
         if (res && res.ok) {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(req, copy));

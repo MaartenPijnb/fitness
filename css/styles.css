@@ -196,6 +196,7 @@ button { border: 0; background: none; cursor: pointer; touch-action: manipulatio
   margin: 0 auto;
   padding: calc(env(safe-area-inset-top) + 10px) var(--pad) calc(var(--tab-h) + 28px);
   min-height: 100%;
+  overflow-x: hidden;   /* vangnet: niets mag de pagina zijwaarts laten schuiven */
 }
 
 .head { padding: 14px 4px 18px; }
@@ -570,15 +571,22 @@ button { border: 0; background: none; cursor: pointer; touch-action: manipulatio
 .day-ex .n { font-size: 14px; font-weight: 550; }
 .day-ex .s { font-size: 12.5px; color: var(--ink-3); margin-top: 1px; }
 
-/* Jaarkalender met trainingsdichtheid */
-.cal { display: flex; gap: 3px; overflow-x: auto; padding: 4px 2px 10px; scrollbar-width: none; }
-.cal::-webkit-scrollbar { display: none; }
-.cal-w { display: flex; flex-direction: column; gap: 3px; }
-.cal-d { width: 11px; height: 11px; border-radius: 3px; background: rgb(var(--glass-tint) / 0.055); }
+/* Kalender met trainingsdichtheid.
+   De kolommen verdelen de beschikbare breedte (flex-basis 0), dus het raster
+   past altijd precies — of het scherm nu 360 of 440 px breed is. De vakjes
+   blijven vierkant via aspect-ratio in plaats van een vaste hoogte. */
+.cal { display: flex; gap: 3px; padding: 4px 0 10px; }
+.cal-w { display: flex; flex-direction: column; gap: 3px; flex: 1 1 0; min-width: 0; }
+.cal-d { width: 100%; aspect-ratio: 1; border-radius: 3px; background: rgb(var(--glass-tint) / 0.055); }
 .cal-d.l1 { background: rgb(139 125 255 / 0.42); }
 .cal-d.l2 { background: rgb(139 125 255 / 0.68); }
 .cal-d.l3 { background: linear-gradient(150deg, var(--accent), var(--accent-2)); box-shadow: 0 0 8px rgb(139 125 255 / 0.5); }
-.cal-m { display: flex; gap: 3px; font-size: 9.5px; color: var(--ink-3); padding: 0 2px 4px; }
+
+/* Labels krijgen dezelfde verdeling als de kolommen, zodat ze uitgelijnd
+   blijven. De tekst mag buiten zijn vakje lopen: met flex-basis 0 en
+   min-width 0 verbreedt dat de rij niet. */
+.cal-m { display: flex; gap: 3px; font-size: 9.5px; color: var(--ink-3); padding: 0 0 3px; }
+.cal-m span { flex: 1 1 0; min-width: 0; white-space: nowrap; }
 
 /* ============================= Progressie ============================== */
 

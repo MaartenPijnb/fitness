@@ -168,7 +168,9 @@ const Charts = (() => {
         }
         cur.setDate(cur.getDate() + 1);
       }
-      months.push(`<span style="width:14px;flex:none">${monthLabel}</span>`);
+      // Geen vaste breedte: kolommen en labels verdelen samen de beschikbare
+      // ruimte, zodat het raster op elk scherm precies past.
+      months.push(`<span>${monthLabel}</span>`);
       cols.push(`<span class="cal-w">${col.join('')}</span>`);
     }
 
