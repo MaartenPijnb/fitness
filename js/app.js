@@ -40,6 +40,7 @@
     search:'<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
     trophy:'<path d="M8 4h8v5a4 4 0 01-8 0V4zM8 6H5v1a3 3 0 003 3M16 6h3v1a3 3 0 01-3 3M10 17h4M9 21h6M12 13v4"/>',
     back:  '<path d="M15 5l-7 7 7 7"/>',
+    chev:  '<path d="M9 5l7 7-7 7"/>',
   };
 
   const svg = (d, cls = '') =>
@@ -746,43 +747,105 @@
 
   /* ============================= Oefeningen ============================= */
 
+  /** Alle oefeningen van een spiergroep, inclusief de nooit gebruikte. */
+  function exercisesIn(catId) {
+    const { all } = Engine.rotation(catId);
+    const rest = Store.state.exercises
+      .filter(e => !e.del && e.cat === catId && !all.some(a => a.ex.id === e.id))
+      .map(e => ({ ex: e, uses: 0, since: null, total: 0 }));
+    return [...all, ...rest];
+  }
+
+  /** Eén regel in een oefeninglijst. */
+  function exerciseRow(o, colour) {
+    const ser = o.total ? Engine.series(o.ex.id) : [];
+    const s = Engine.suggest(o.ex.id);
+    return `
+      <button class="pane plan-item" style="--c:${colour}" data-act="view-ex" data-ex="${o.ex.id}">
+        <span class="dot"></span>
+        <span class="grow">
+          <div class="plan-ex trunc">${esc(o.ex.name)}</div>
+          <div class="plan-hint">${o.since == null ? 'nog niet gedaan'
+            : `${agoLabel(o.since)} · ${o.total} ${o.total === 1 ? 'sessie' : 'sessies'}`}</div>
+        </span>
+        ${ser.length > 2 ? Charts.spark(ser.slice(-14).map(x => x.top), colour) : ''}
+        ${s.fresh ? '' : `<span class="plan-target">${fmtW(s.w)}<small>kg</small></span>`}
+      </button>`;
+  }
+
+  /**
+   * Oefeningen: eerst de spiergroepen als mapjes, daarin pas de oefeningen.
+   * Zoeken springt over de mapjes heen en doorzoekt alles tegelijk.
+   */
   function viewExercises() {
     const q = (view.q || '').toLowerCase().trim();
-    let body = '';
+    const total = Store.state.exercises.filter(e => !e.del).length;
+    const search = `<input class="search" type="search" placeholder="Zoeken in alle oefeningen…"
+      value="${esc(view.q || '')}" data-act="ex-q" autocomplete="off">`;
 
-    for (const cat of Store.state.categories) {
-      const { all } = Engine.rotation(cat.id);
-      const unused = Store.state.exercises
-        .filter(e => !e.del && e.cat === cat.id && !all.some(a => a.ex.id === e.id))
-        .map(e => ({ ex: e, uses: 0, since: null, total: 0 }));
-      const list = [...all, ...unused].filter(o => !q || o.ex.name.toLowerCase().includes(q));
-      if (!list.length) continue;
-
-      body += `<div class="sec"><h2 style="color:${cat.colour}">${esc(cat.name)}</h2>
-        <span class="tiny dim">${list.length}</span></div><div class="stack">`;
-
-      for (const o of list) {
-        const ser = o.total ? Engine.series(o.ex.id) : [];
-        const s = Engine.suggest(o.ex.id);
-        body += `
-          <button class="pane plan-item" style="--c:${cat.colour}" data-act="view-ex" data-ex="${o.ex.id}">
-            <span class="dot"></span>
-            <span class="grow">
-              <div class="plan-ex trunc">${esc(o.ex.name)}</div>
-              <div class="plan-hint">${o.since == null ? 'nog niet gedaan'
-                : `${agoLabel(o.since)} · ${o.total} sessies`}</div>
-            </span>
-            ${ser.length > 2 ? Charts.spark(ser.slice(-14).map(x => x.top), cat.colour) : ''}
-            ${s.fresh ? '' : `<span class="plan-target">${fmtW(s.w)}<small>kg</small></span>`}
-          </button>`;
+    /* --- Zoeken: platte lijst over alle spiergroepen heen --- */
+    if (q) {
+      const hits = [];
+      for (const cat of Store.state.categories) {
+        for (const o of exercisesIn(cat.id)) {
+          if (o.ex.name.toLowerCase().includes(q)) hits.push({ o, cat });
+        }
       }
-      body += '</div>';
+      return `<div class="view">
+        <div class="head"><h1>Oefeningen</h1><p>${hits.length} van ${total} gevonden</p></div>
+        ${search}
+        <div class="stack" style="margin-top:14px">
+          ${hits.map(h => exerciseRow(h.o, h.cat.colour)).join('')
+            || '<div class="glass empty"><p>Niets gevonden</p></div>'}
+        </div>
+      </div>`;
     }
 
+    /* --- In een mapje --- */
+    if (view.exCat) {
+      const cat = Store.cat(view.exCat);
+      const list = exercisesIn(view.exCat);
+      return `<div class="view">
+        <div class="row" style="padding:6px 0 2px">
+          <button class="icon-btn" data-act="back-cat" aria-label="Terug">${svg(I.back)}</button>
+          <span class="grow"></span>
+          <button class="btn sm ghost" data-act="new-ex" data-cat="${cat.id}">${svg(I.plus)} Nieuw</button>
+        </div>
+        <div class="head" style="padding-top:6px">
+          <h1><span style="color:${cat.colour}">●</span> ${esc(cat.name)}</h1>
+          <p>${list.length} ${list.length === 1 ? 'oefening' : 'oefeningen'} · meest gebruikte eerst</p>
+        </div>
+        ${search}
+        <div class="stack" style="margin-top:14px">${list.map(o => exerciseRow(o, cat.colour)).join('')}</div>
+      </div>`;
+    }
+
+    /* --- Overzicht van de mapjes --- */
+    const folders = Store.state.categories.map(cat => {
+      const list = exercisesIn(cat.id);
+      const done = list.filter(o => o.since != null);
+      return {
+        cat,
+        n: list.length,
+        last: done.length ? Math.min(...done.map(o => o.since)) : null,
+      };
+    }).filter(f => f.n);
+
     return `<div class="view">
-      <div class="head"><h1>Oefeningen</h1><p>${Store.state.exercises.filter(e => !e.del).length} in je logboek</p></div>
-      <input class="search" type="search" placeholder="Zoeken…" value="${esc(view.q || '')}" data-act="ex-q" autocomplete="off">
-      ${body || '<div class="glass empty" style="margin-top:14px"><p>Niets gevonden</p></div>'}
+      <div class="head"><h1>Oefeningen</h1><p>${total} in je logboek, verdeeld over ${folders.length} spiergroepen</p></div>
+      ${search}
+      <div class="stack" style="margin-top:14px">
+        ${folders.map(f => `
+          <button class="pane plan-item" style="--c:${f.cat.colour}" data-act="ex-cat" data-cat="${f.cat.id}">
+            <span class="dot"></span>
+            <span class="grow">
+              <div class="plan-ex">${esc(f.cat.name)}</div>
+              <div class="plan-hint trunc">${f.n} ${f.n === 1 ? 'oefening' : 'oefeningen'}${
+                f.last != null ? ` · ${agoLabel(f.last)}` : ''}</div>
+            </span>
+            <span class="chev">${svg(I.chev)}</span>
+          </button>`).join('')}
+      </div>
       <button class="btn ghost block" style="margin-top:20px" data-act="new-ex" data-cat="">
         ${svg(I.plus)} Nieuwe oefening
       </button>
@@ -1012,6 +1075,7 @@
   function go(tab) {
     view.tab = tab;
     view.exId = null;
+    view.exCat = null;
     view.q = '';
     view.histN = 25;
     render();
@@ -1029,6 +1093,9 @@
       /* -- navigatie -- */
       case 'tab': go(el.dataset.tab); break;
       case 'back': view.exId = null; render(); break;
+
+      case 'ex-cat': view.exCat = el.dataset.cat; view.q = ''; render(); break;
+      case 'back-cat': view.exCat = null; view.q = ''; render(); break;
 
       case 'view-ex':
         if (inSheet) closeSheet();
